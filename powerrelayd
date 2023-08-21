@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+#
+# This file is part of the Robotic Observatory Control Kit (rockit)
+#
+# rockit is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# rockit is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with rockit.  If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
+import json
+import threading
+import time
+
+import serial
+import Pyro4
+from rockit.common import daemons, IP, log, validation
+from rockit.common.helpers import pyro_client_matches
+
+CONFIG_SCHEMA = {
+    'type': 'object',
+    'additionalProperties': False,
+    'required': ['daemon', 'log_name', 'control_machines', 'serial_port', 'serial_baud', 'serial_timeout'],
+    'properties': {
+        'daemon': {
+            'type': 'string',
+            'daemon_name': True
+        },
+        'log_name': {
+            'type': 'string',
+        },
+        'control_machines': {
+            'type': 'array',
+            'items': {
+                'type': 'string',
+                'machine_name': True
+            }
+        },
+        'serial_port': {
+            'type': 'string',
+        },
+        'serial_baud': {
+            'type': 'number',
+            'min': 0
+        },
+        'serial_timeout': {
+            'type': 'number',
+            'min': 0
+        },
+    }
+}
+
+
+class Config:
+    """Daemon configuration parsed from a json file"""
+    def __init__(self, config_filename):
+        # Will throw on file not found or invalid json
+        with open(config_filename, 'r', encoding='utf-8') as config_file:
+            config_json = json.load(config_file)
+
+        # Will throw on schema violations
+        validation.validate_config(config_json, CONFIG_SCHEMA, {
+            'daemon_name': validation.daemon_name_validator,
+            'machine_name': validation.machine_name_validator
+        })
+
+        self.daemon = getattr(daemons, config_json['daemon'])
+        self.log_name = config_json['log_name']
+        self.control_machines = [getattr(IP, machine) for machine in config_json['control_machines']]
+        self.serial_port = config_json['serial_port']
+        self.serial_baud = int(config_json['serial_baud'])
+        self.serial_timeout = int(config_json['serial_timeout'])
+
+
+class PowerRelayDaemon:
+    def __init__(self, config):
+        self._config = config
+        self._updated_condition = threading.Condition()
+        self._request_enabled = False
+        self._enabled = False
+        threading.Thread(target=self.run, daemon=True).start()
+
+    def run(self):
+        """Main run loop"""
+        port_connected = False
+        first_connection = True
+        while True:
+            # Initial setup
+            try:
+                port = serial.Serial(self._config.serial_port, self._config.serial_baud,
+                                     timeout=self._config.serial_timeout)
+                print('Connected to', self._config.serial_port)
+
+                prefix = 'Established' if first_connection else 'Restored'
+                log.info(self._config.log_name, prefix + ' contact with Arduino relay')
+                port_connected = True
+                first_connection = False
+            except Exception as exception:
+                if port_connected:
+                    log.error(self._config.log_name, 'Lost contact with Arduino relay')
+
+                print('error: failed to connect to Arduino relay')
+                print(exception)
+                print('Will retry in 10 seconds...')
+                time.sleep(10.)
+                continue
+
+            try:
+                # Flush any stale state
+                port.flushInput()
+                port.flushOutput()
+
+                # Main run loop
+                while True:
+                    was_enabled = self._enabled
+                    self._enabled = port.read(1) == b'\x01'
+                    if self._enabled != was_enabled:
+                        # Wake up thread that requested the change
+                        with self._updated_condition:
+                            self._updated_condition.notify_all()
+
+                    if self._request_enabled != self._enabled:
+                        port.write(b'\x01' if self._request_enabled else b'\x00')
+
+            except Exception as exception:
+                port.close()
+                if port_connected:
+                    log.error(self._config.log_name, 'Lost contact with the Arduino relay')
+                    print('error: failed to connect to the Arduino relay')
+                    print(exception)
+
+                port_connected = False
+                print('Will retry in 10 seconds...')
+                time.sleep(10.)
+
+    @Pyro4.expose
+    def get_relay(self):
+        return self._enabled
+
+    @Pyro4.expose
+    def set_relay(self, enabled):
+        if not pyro_client_matches(self._config.control_machines):
+            return False
+
+        self._request_enabled = enabled
+
+        # Wait for the change to apply
+        # Arduino reports every 0.5s, so 1.5s should always be sufficient
+        with self._updated_condition:
+            self._updated_condition.wait(1.5)
+
+        return self._enabled == enabled
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Power Relay Server')
+    parser.add_argument('config', help='Path to configuration json file')
+    args = parser.parse_args()
+    _config = Config(args.config)
+    _config.daemon.launch(PowerRelayDaemon(_config))
