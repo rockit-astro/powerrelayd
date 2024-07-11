@@ -21,10 +21,10 @@ A configuration file is specified when launching the power relay server.
 
 The automated packaging scripts will push 2 RPM packages to the observatory package repository:
 
-| Package                         | Description                                                                              |
-|---------------------------------|------------------------------------------------------------------------------------------|
-| rockit-powerrelay-server        | Contains the `powerd` server and systemd service file.                                   |
-| rockit-powerrelay-superwasp     | Contains the json configuration and udev rules for SuperWASP.                            |
+| Package                  | Description                                               |
+|--------------------------|-----------------------------------------------------------|
+| rockit-powerrelay-server | Contains the `powerd` server and systemd service file.    |
+| rockit-powerrelay-sting  | Contains the json configuration and udev rules for STING. |
 
 After installing packages, the systemd service should be enabled:
 

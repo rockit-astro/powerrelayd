@@ -1,0 +1,8 @@
+{
+  "daemon": "sting_power_relay",
+  "log_name": "powerrelayd@sting",
+  "control_machines": ["STINGTCS"],
+  "serial_port": "/dev/dehumidifier",
+  "serial_baud": 9600,
+  "serial_timeout": 5
+}

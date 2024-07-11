@@ -18,8 +18,8 @@ mkdir -p %{buildroot}%{_udevrulesdir}
 %{__install} %{_sourcedir}/powerrelayd %{buildroot}%{_bindir}
 %{__install} %{_sourcedir}/powerrelayd@.service %{buildroot}%{_unitdir}
 
-%{__install} %{_sourcedir}/superwasp.json %{buildroot}%{_sysconfdir}/powerrelayd/
-%{__install} %{_sourcedir}/10-superwasp-power.rules %{buildroot}%{_udevrulesdir}
+%{__install} %{_sourcedir}/sting.json %{buildroot}%{_sysconfdir}/powerrelayd/
+%{__install} %{_sourcedir}/10-sting-power.rules %{buildroot}%{_udevrulesdir}
 
 %package server
 Summary:  Power relay control server
@@ -33,14 +33,14 @@ Requires: python3-rockit-common
 %defattr(0644,root,root,-)
 %{_unitdir}/powerrelayd@.service
 
-%package data-superwasp
-Summary: Power relay control data for the SuperWASP telescope
+%package data-sting
+Summary: Power relay control data for the STING telescope
 Group:   Unspecified
-%description data-superwasp
+%description data-sting
 
-%files data-superwasp
+%files data-sting
 %defattr(0644,root,root,-)
-%{_udevrulesdir}/10-superwasp-power.rules
-%{_sysconfdir}/powerrelayd/superwasp.json
+%{_udevrulesdir}/10-sting-power.rules
+%{_sysconfdir}/powerrelayd/sting.json
 
 %changelog
