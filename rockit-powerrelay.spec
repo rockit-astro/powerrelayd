@@ -1,6 +1,6 @@
 Name:      rockit-powerrelay
 Version:   %{_version}
-Release:   1
+Release:   1%{dist}
 Summary:   Power control
 Url:       https://github.com/rockit-astro/powerrelayd
 License:   GPL-3.0
